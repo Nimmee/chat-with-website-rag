@@ -154,4 +154,4 @@ grounded answers.
   under "Vector store choice."
 
 ## Limitations
-- Large websites may hit the Gemini Embedding API free-tier quota (429 RESOURCE_EXHAUSTED)
+- Large websites may hit the Gemini Embedding API free-tier quota (429 RESOURCE_EXHAUSTED).
