@@ -14,7 +14,7 @@
     "react-dom": "18.3.1",
     "cheerio": "1.0.0-rc.12",
     "robots-parser": "3.0.1",
-    "openai": "4.52.7",
+    "@google/genai": "^1.30.0",
     "p-limit": "3.1.0"
   },
   "devDependencies": {

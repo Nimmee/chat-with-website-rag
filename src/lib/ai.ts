@@ -1,30 +1,51 @@
-import OpenAI from "openai";
+import { GoogleGenAI } from "@google/genai";
 
-let client: OpenAI | null = null;
+let client: GoogleGenAI | null = null;
 
-function getClient(): OpenAI {
+function getClient(): GoogleGenAI {
   if (!client) {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      throw new Error("OPENAI_API_KEY is not set. Add it to your .env.local file.");
+      throw new Error("GEMINI_API_KEY is not set. Add it to your .env.local file.");
     }
-    client = new OpenAI({ apiKey });
+    client = new GoogleGenAI({ apiKey });
   }
   return client;
 }
 
-const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "text-embedding-3-small";
-const CHAT_MODEL = process.env.CHAT_MODEL || "gpt-4o-mini";
+// gemini-embedding-001: free-tier embedding model.
+// gemini-2.5-flash: free-tier chat model, good quality/speed tradeoff for RAG answers.
+const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "gemini-embedding-001";
+const CHAT_MODEL = process.env.CHAT_MODEL || "gemini-2.5-flash";
 
-/** Embeds an array of texts in a single batched API call. */
+/**
+ * Embeds an array of texts. The Gemini API embeds one request at a time per
+ * "contents" call reliably returning one vector per input string, but to stay
+ * safely within free-tier rate limits we embed sequentially in small batches
+ * rather than firing everything in parallel.
+ */
 export async function embedTexts(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
-  const openai = getClient();
-  const res = await openai.embeddings.create({
-    model: EMBEDDING_MODEL,
-    input: texts
-  });
-  return res.data.map((d) => d.embedding);
+  const ai = getClient();
+
+  const results: number[][] = [];
+  const BATCH = 20; // keep individual requests small and well within free-tier TPM limits
+
+  for (let i = 0; i < texts.length; i += BATCH) {
+    const batch = texts.slice(i, i + BATCH);
+    const res = await ai.models.embedContent({
+      model: EMBEDDING_MODEL,
+      contents: batch
+    });
+    const embeddings = res.embeddings || [];
+    for (const e of embeddings) {
+      results.push(e.values || []);
+    }
+    // Small pause between batches to be gentle on free-tier RPM limits.
+    if (i + BATCH < texts.length) await new Promise((r) => setTimeout(r, 300));
+  }
+
+  return results;
 }
 
 export async function embedQuery(text: string): Promise<number[]> {
@@ -46,7 +67,7 @@ export interface RetrievedChunk {
  * model is instructed to say so rather than fall back on its own training data.
  */
 export async function answerFromContext(question: string, chunks: RetrievedChunk[]): Promise<string> {
-  const openai = getClient();
+  const ai = getClient();
 
   const context = chunks
     .map((c, i) => `[Source ${i + 1}] (${c.url})\n${c.text}`)
@@ -63,14 +84,14 @@ Rules:
 Context:
 ${context || "(no relevant content was retrieved)"}`;
 
-  const res = await openai.chat.completions.create({
+  const res = await ai.models.generateContent({
     model: CHAT_MODEL,
-    temperature: 0.2,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: question }
-    ]
+    contents: question,
+    config: {
+      systemInstruction: systemPrompt,
+      temperature: 0.2
+    }
   });
 
-  return res.choices[0]?.message?.content?.trim() || "I couldn't generate a response.";
+  return res.text?.trim() || "I couldn't generate a response.";
 }

@@ -10,7 +10,7 @@ the source pages.
 - **Frontend:** Next.js 14 (App Router) + React + Tailwind
 - **Backend:** Next.js API routes (Node.js) — `/api/crawl`, `/api/chat`
 - **Crawling:** `fetch` + `cheerio` (HTML parsing), `robots-parser` (robots.txt)
-- **Embeddings / chat:** OpenAI API (`text-embedding-3-small`, `gpt-4o-mini`)
+- **Embeddings / chat:** Google Gemini API (`gemini-embedding-001`, `gemini-2.5-flash`) — free tier, no credit card required
 - **Vector store:** a small in-memory / JSON-file index (see rationale below) —
   no external vector DB required
 
@@ -25,9 +25,10 @@ the source pages.
    ```bash
    cp .env.example .env.local
    ```
-   Open `.env.local` and set:
+   Get a free key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+   (Google account, no credit card). Open `.env.local` and set:
    ```
-   OPENAI_API_KEY=sk-...
+   GEMINI_API_KEY=AIza...
    ```
    Everything else in `.env.local` is optional — defaults are already sensible.
 
@@ -44,7 +45,7 @@ the source pages.
    - Once indexed, ask questions in the chat box below. Every answer that
      draws on the site shows numbered source links.
 
-No database setup, no API keys besides OpenAI, no external services.
+No database setup, no paid API keys, no external services.
 
 ## Crawling strategy
 
@@ -144,8 +145,10 @@ grounded answers.
 
 - Interpreted "site" as "single origin" (protocol + host) — subdomains are
   treated as out of scope unless the seed URL itself uses one.
-- Chose OpenAI over other providers only because it's what I have a key for;
-  the code isolates all model calls in `src/lib/ai.ts` so swapping providers
-  means changing one file.
+- Chose Google Gemini over other providers because it offers a genuinely free
+  tier (no credit card, no trial expiry) with both an embedding model and a
+  capable chat model, which suits a take-home project well; the code isolates
+  all model calls in `src/lib/ai.ts` so swapping providers means changing one
+  file.
 - Went with a JSON-file store instead of an actual vector DB — justified above
   under "Vector store choice."
