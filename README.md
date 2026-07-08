@@ -152,3 +152,6 @@ grounded answers.
   file.
 - Went with a JSON-file store instead of an actual vector DB — justified above
   under "Vector store choice."
+
+## Limitations
+- Large websites may hit the Gemini Embedding API free-tier quota (429 RESOURCE_EXHAUSTED).
