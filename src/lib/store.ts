@@ -19,7 +19,7 @@ export interface SiteData {
   chunks: StoredChunk[];
 }
 
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR = process.env.VERCEL ? "/tmp/rag-chat-data" : path.join(process.cwd(), "data");
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
