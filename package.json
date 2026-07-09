@@ -15,6 +15,7 @@
     "cheerio": "1.0.0-rc.12",
     "robots-parser": "3.0.1",
     "@google/genai": "^1.30.0",
+    "@upstash/redis": "1.38.0",
     "p-limit": "3.1.0"
   },
   "devDependencies": {

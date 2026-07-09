@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { Redis } from "@upstash/redis";
 
 export interface StoredChunk {
   id: string;
@@ -19,10 +20,22 @@ export interface SiteData {
   chunks: StoredChunk[];
 }
 
-const DATA_DIR = process.env.VERCEL ? "/tmp/rag-chat-data" : path.join(process.cwd(), "data");
+const redisUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+const redisToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+const redis = redisUrl && redisToken ? new Redis({ url: redisUrl, token: redisToken }) : null;
+
+const DATA_DIR = path.join(process.cwd(), "data");
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+function filePathFor(siteId: string) {
+  return path.join(DATA_DIR, `${siteId}.json`);
+}
+
+function redisKeyFor(siteId: string) {
+  return `site:${siteId}`;
 }
 
 export function siteIdFor(seedUrl: string): string {
@@ -30,24 +43,21 @@ export function siteIdFor(seedUrl: string): string {
   return crypto.createHash("sha1").update(domain).digest("hex").slice(0, 12);
 }
 
-function filePathFor(siteId: string) {
-  return path.join(DATA_DIR, `${siteId}.json`);
-}
-
-/**
- * We use a JSON-file-backed store instead of a real vector database.
- * Rationale (see README): this is a single-site, small-scale demo -- likely a
- * few hundred chunks at most. Brute-force cosine similarity over that many
- * vectors is well under 50ms, so a dedicated vector DB (pgvector, Pinecone,
- * etc.) would add infra complexity without a measurable benefit here. This
- * would NOT be the right choice at real scale (many sites / millions of chunks).
- */
-export function saveSite(data: SiteData) {
+export async function saveSite(data: SiteData): Promise<void> {
+  if (redis) {
+    await redis.set(redisKeyFor(data.siteId), JSON.stringify(data));
+    return;
+  }
   ensureDataDir();
   fs.writeFileSync(filePathFor(data.siteId), JSON.stringify(data), "utf-8");
 }
 
-export function loadSite(siteId: string): SiteData | null {
+export async function loadSite(siteId: string): Promise<SiteData | null> {
+  if (redis) {
+    const raw = await redis.get(redisKeyFor(siteId));
+    if (!raw) return null;
+    return typeof raw === "string" ? (JSON.parse(raw) as SiteData) : (raw as SiteData);
+  }
   const file = filePathFor(siteId);
   if (!fs.existsSync(file)) return null;
   try {
@@ -57,17 +67,15 @@ export function loadSite(siteId: string): SiteData | null {
   }
 }
 
-export function siteMeta(siteId: string): Omit<SiteData, "chunks"> | null {
-  const site = loadSite(siteId);
+export async function siteMeta(siteId: string): Promise<Omit<SiteData, "chunks"> | null> {
+  const site = await loadSite(siteId);
   if (!site) return null;
   const { chunks, ...meta } = site;
   return meta;
 }
 
 function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0,
-    normA = 0,
-    normB = 0;
+  let dot = 0, normA = 0, normB = 0;
   for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i];
     normA += a[i] * a[i];
@@ -84,9 +92,8 @@ export interface SearchResult {
   score: number;
 }
 
-/** Brute-force top-K nearest neighbor search by cosine similarity. */
-export function search(siteId: string, queryEmbedding: number[], topK = 5): SearchResult[] {
-  const site = loadSite(siteId);
+export async function search(siteId: string, queryEmbedding: number[], topK = 5): Promise<SearchResult[]> {
+  const site = await loadSite(siteId);
   if (!site) return [];
 
   const scored = site.chunks.map((c) => ({

@@ -35,16 +35,18 @@ export async function POST(req: NextRequest) {
     });
 
     if (pages.length === 0) {
+      console.error("Crawl produced 0 pages. Debug log:\n" + logs.join("\n"));
       return NextResponse.json(
-        { error: "Couldn't extract any content from that site (blocked by robots.txt, no HTML pages found, or the site is empty)." },
+        {
+          error: "Couldn't extract any content from that site.",
+          debugLog: logs.slice(-10)
+        },
         { status: 422 }
       );
     }
 
-    // Chunk every page
     const allChunks = pages.flatMap((p) => chunkText(p.text, p.url, p.title));
 
-    // Embed in batches to stay well under provider request-size limits
     const BATCH_SIZE = 100;
     const storedChunks: StoredChunk[] = [];
     for (let i = 0; i < allChunks.length; i += BATCH_SIZE) {
@@ -62,7 +64,7 @@ export async function POST(req: NextRequest) {
     }
 
     const siteId = siteIdFor(seed.toString());
-    saveSite({
+    await saveSite({
       siteId,
       seedUrl: seed.toString(),
       domain: seed.hostname,

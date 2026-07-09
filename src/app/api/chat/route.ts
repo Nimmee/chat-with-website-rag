@@ -3,9 +3,6 @@ import { embedQuery, answerFromContext } from "@/lib/ai";
 import { search, siteMeta } from "@/lib/store";
 
 const TOP_K = Number(process.env.RETRIEVAL_TOP_K || 5);
-// Cosine similarity threshold below which we consider the site to have
-// "no relevant content" for the question -- this is the main guardrail
-// against hallucinating an answer to an off-topic question.
 const MIN_SCORE = Number(process.env.RETRIEVAL_MIN_SCORE || 0.25);
 
 export async function POST(req: NextRequest) {
@@ -16,13 +13,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing 'siteId' or 'question'." }, { status: 400 });
     }
 
-    const meta = siteMeta(siteId);
+    const meta = await siteMeta(siteId);
     if (!meta) {
       return NextResponse.json({ error: "Unknown site. Crawl a URL first." }, { status: 404 });
     }
 
     const queryEmbedding = await embedQuery(question);
-    const results = search(siteId, queryEmbedding, TOP_K);
+    const results = await search(siteId, queryEmbedding, TOP_K);
 
     const relevant = results.filter((r) => r.score >= MIN_SCORE);
 
@@ -35,7 +32,6 @@ export async function POST(req: NextRequest) {
 
     const answer = await answerFromContext(question, relevant);
 
-    // De-duplicate sources by URL for a clean citation list
     const seen = new Set<string>();
     const sources = relevant
       .filter((r) => {
